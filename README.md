@@ -1,216 +1,105 @@
-# shadcn-electron-app
+# SSH Tunnel Manager
 
-## Installation
+A desktop application for managing SSH tunnels to Docker containers on remote servers. Discover running containers, create port-forwarding tunnels with one click, and manage multiple simultaneous connections — all from a clean, minimal UI.
 
-### 1. Create project
+![Electron](https://img.shields.io/badge/Electron-31-47848F?logo=electron&logoColor=white)
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178C6?logo=typescript&logoColor=white)
+
+## Features
+
+- **Container Discovery** — Connect to a remote server via SSH and automatically list all running Docker containers with their exposed ports
+- **One-Click Tunneling** — Create SSH local port-forwarding tunnels to any container port instantly
+- **Multi-Tunnel Support** — Run multiple tunnels simultaneously with automatic local port assignment (starting from port 10000)
+- **Real-Time Status** — See active tunnel mappings (`localhost:PORT` → `container:PORT`) at a glance
+- **Persistent Config** — SSH connection settings are saved to `~/.tunnel_manager.json` and restored on launch
+- **Key-Based Auth** — Supports SSH key authentication with custom key paths
+
+## Getting Started
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) (v18+)
+- npm or pnpm
+- SSH access to a remote server running Docker
+
+### Install
 
 ```bash
-$ pnpm create @quick-start/electron
+npm install
 ```
 
-### 2. Install dependencies
+### Development
 
 ```bash
-$ pnpm add tailwindcss-animate class-variance-authority clsx tailwind-merge lucide-react
+npm run dev
 ```
 
-### 3. Install Tailwind CSS
+### Build
 
 ```bash
-$ pnpm add -D tailwindcss postcss autoprefixer
+# Windows
+npm run build:win
 
-$ pnpm dlx tailwindcss init -p
+# macOS
+npm run build:mac
+
+# Linux
+npm run build:linux
 ```
 
-### 4. Update `tailwind.config.js`
+## Usage
 
-```js
-/** @type {import('tailwindcss').Config} */
-module.exports = {
-  content: ['./src/renderer/src/**/*.{js,ts,jsx,tsx}'],
-  theme: {
-    container: {
-      center: true,
-      padding: '2rem',
-      screens: {
-        '2xl': '1400px'
-      }
-    },
-    extend: {
-      colors: {
-        border: 'hsl(var(--border))',
-        input: 'hsl(var(--input))',
-        ring: 'hsl(var(--ring))',
-        background: 'hsl(var(--background))',
-        foreground: 'hsl(var(--foreground))',
-        primary: {
-          DEFAULT: 'hsl(var(--primary))',
-          foreground: 'hsl(var(--primary-foreground))'
-        },
-        secondary: {
-          DEFAULT: 'hsl(var(--secondary))',
-          foreground: 'hsl(var(--secondary-foreground))'
-        },
-        destructive: {
-          DEFAULT: 'hsl(var(--destructive))',
-          foreground: 'hsl(var(--destructive-foreground))'
-        },
-        muted: {
-          DEFAULT: 'hsl(var(--muted))',
-          foreground: 'hsl(var(--muted-foreground))'
-        },
-        accent: {
-          DEFAULT: 'hsl(var(--accent))',
-          foreground: 'hsl(var(--accent-foreground))'
-        },
-        popover: {
-          DEFAULT: 'hsl(var(--popover))',
-          foreground: 'hsl(var(--popover-foreground))'
-        },
-        card: {
-          DEFAULT: 'hsl(var(--card))',
-          foreground: 'hsl(var(--card-foreground))'
-        }
-      },
-      borderRadius: {
-        lg: `var(--radius)`,
-        md: `calc(var(--radius) - 2px)`,
-        sm: 'calc(var(--radius) - 4px)'
-      },
-      keyframes: {
-        'accordion-down': {
-          from: { height: '0' },
-          to: { height: 'var(--radix-accordion-content-height)' }
-        },
-        'accordion-up': {
-          from: { height: 'var(--radix-accordion-content-height)' },
-          to: { height: '0' }
-        }
-      },
-      animation: {
-        'accordion-down': 'accordion-down 0.2s ease-out',
-        'accordion-up': 'accordion-up 0.2s ease-out'
-      }
-    }
-  },
-  plugins: [require('tailwindcss-animate')]
-}
+1. Enter your SSH connection details (host, user, port, key path)
+2. Click **Scan Containers** to discover running Docker containers on the remote server
+3. Click the **Forward** button on any container to create an SSH tunnel to its exposed port
+4. Access the container service locally at the assigned `localhost:PORT`
+5. Click **Stop** on individual tunnels or **Stop All** to tear down connections
+
+## How It Works
+
+The app connects to your remote server over SSH and runs `docker ps` to discover containers. When you forward a port, it creates an SSH local port-forwarding tunnel (`ssh -L localPort:containerIP:remotePort`) that maps a local port to the container's exposed port. Tunnels are managed as child processes with graceful shutdown (SIGTERM, then SIGKILL after 5s).
+
+## Tech Stack
+
+- **Electron** — Cross-platform desktop runtime
+- **React** — UI framework
+- **TypeScript** — Type safety
+- **Tailwind CSS** — Styling
+- **shadcn/ui** — UI components (Radix UI)
+- **electron-vite** — Build tooling
+- **Lucide React** — Icons
+
+## Project Structure
+
+```
+src/
+├── main/index.ts           # Electron main process, IPC handlers, SSH operations
+├── preload/index.ts         # Secure API bridge between main and renderer
+├── renderer/src/
+│   ├── App.tsx              # Root component, state management
+│   ├── components/
+│   │   ├── ConnectionForm   # SSH config input form
+│   │   ├── ContainerList    # Container list with status display
+│   │   ├── ContainerRow     # Individual container with tunnel controls
+│   │   └── ui/              # Reusable shadcn components
+│   └── lib/utils.ts         # Utility functions
+└── shared/types.ts          # Shared TypeScript interfaces
 ```
 
-### 5. Update `tsconfig.json`
+## Configuration
+
+SSH settings are persisted at `~/.tunnel_manager.json`:
 
 ```json
 {
-  "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/renderer/src/*"]
-    }
-  }
+  "host": "your-server.com",
+  "user": "root",
+  "port": "22",
+  "keyPath": "/path/to/ssh/key"
 }
 ```
 
-### 6. Update `tsconfig.web.json`
+## License
 
-```json
-{
-  "compilerOptions": {
-    "composite": true,
-    "jsx": "react-jsx",
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/renderer/src/*"],
-      "@renderer/*": ["src/renderer/src/*"]
-    }
-  }
-}
-```
-
-### 7. Create `components.json`
-
-```json
-{
-  "style": "new-york",
-  "tailwind": {
-    "config": "tailwind.config.js",
-    "css": "src/renderer/src/assets/base.css",
-    "baseColor": "zinc",
-    "cssVariables": true,
-    "prefix": ""
-  },
-  "rsc": false,
-  "aliases": {
-    "utils": "@/lib/utils",
-    "components": "@/components",
-    "lib": "@/lib",
-    "hooks": "@/lib/hooks",
-    "ui": "@/components/ui"
-  },
-  "iconLibrary": "lucide"
-}
-```
-
-### 8. Update `src/renderer/src/assets/base.css`
-
-```css
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-@layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 47.4% 11.2%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 47.4% 11.2%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 100% 50%;
-    --destructive-foreground: 210 40% 98%;
-    --ring: 215 20.2% 65.1%;
-    --radius: 0.5rem;
-  }
-
-  .dark {
-    --background: 224 71% 4%;
-    --foreground: 213 31% 91%;
-    --muted: 223 47% 11%;
-    --muted-foreground: 215.4 16.3% 56.9%;
-    --accent: 216 34% 17%;
-    --accent-foreground: 210 40% 98%;
-    --popover: 224 71% 4%;
-    --popover-foreground: 215 20.2% 65.1%;
-    --border: 216 34% 17%;
-    --input: 216 34% 17%;
-    --card: 224 71% 4%;
-    --card-foreground: 213 31% 91%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 1.2%;
-    --secondary: 222.2 47.4% 11.2%;
-    --secondary-foreground: 210 40% 98%;
-    --destructive: 0 63% 31%;
-    --destructive-foreground: 210 40% 98%;
-    --ring: 216 34% 17%;
-    --radius: 0.5rem;
-  }
-}
-
-@layer base {
-  * {
-    @apply border-border;
-  }
-  body {
-    @apply font-sans antialiased bg-background text-foreground;
-  }
-}
-```
+MIT
