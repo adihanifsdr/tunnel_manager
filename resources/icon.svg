@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1a1b30"/>
+      <stop offset="100%" stop-color="#252740"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#e86fa4"/>
+      <stop offset="100%" stop-color="#a855f7"/>
+    </linearGradient>
+    <linearGradient id="arrowGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#e86fa4"/>
+      <stop offset="100%" stop-color="#a855f7"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="108" fill="url(#bgGrad)"/>
+
+  <!-- Subtle grid pattern for tech feel -->
+  <g opacity="0.04" stroke="#e86fa4" stroke-width="1">
+    <line x1="128" y1="0" x2="128" y2="512"/>
+    <line x1="256" y1="0" x2="256" y2="512"/>
+    <line x1="384" y1="0" x2="384" y2="512"/>
+    <line x1="0" y1="128" x2="512" y2="128"/>
+    <line x1="0" y1="256" x2="512" y2="256"/>
+    <line x1="0" y1="384" x2="512" y2="384"/>
+  </g>
+
+  <!-- Outer tunnel ring (glow) -->
+  <circle cx="256" cy="248" r="155" fill="none" stroke="url(#accentGrad)" stroke-width="4" opacity="0.15" filter="url(#softGlow)"/>
+
+  <!-- Main tunnel ring -->
+  <circle cx="256" cy="248" r="145" fill="none" stroke="url(#accentGrad)" stroke-width="14" opacity="0.85"/>
+
+  <!-- Inner tunnel ring for depth -->
+  <circle cx="256" cy="248" r="100" fill="none" stroke="url(#accentGrad)" stroke-width="8" opacity="0.35"/>
+
+  <!-- Innermost ring -->
+  <circle cx="256" cy="248" r="55" fill="none" stroke="url(#accentGrad)" stroke-width="5" opacity="0.2"/>
+
+  <!-- Perspective lines (tunnel depth) -->
+  <line x1="144" y1="138" x2="210" y2="198" stroke="url(#accentGrad)" stroke-width="3" opacity="0.15" stroke-linecap="round"/>
+  <line x1="368" y1="138" x2="302" y2="198" stroke="url(#accentGrad)" stroke-width="3" opacity="0.15" stroke-linecap="round"/>
+  <line x1="144" y1="358" x2="210" y2="298" stroke="url(#accentGrad)" stroke-width="3" opacity="0.15" stroke-linecap="round"/>
+  <line x1="368" y1="358" x2="302" y2="298" stroke="url(#accentGrad)" stroke-width="3" opacity="0.15" stroke-linecap="round"/>
+
+  <!-- Center glow -->
+  <circle cx="256" cy="248" r="20" fill="#e86fa4" opacity="0.15" filter="url(#softGlow)"/>
+  <circle cx="256" cy="248" r="8" fill="white" opacity="0.9"/>
+
+  <!-- Forward arrow through tunnel -->
+  <g filter="url(#glow)">
+    <!-- Arrow shaft -->
+    <line x1="170" y1="248" x2="320" y2="248" stroke="url(#arrowGrad)" stroke-width="10" stroke-linecap="round"/>
+    <!-- Arrow head -->
+    <polyline points="300,228 330,248 300,268" fill="none" stroke="#a855f7" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Left endpoint node -->
+  <circle cx="155" cy="248" r="14" fill="#e86fa4" filter="url(#glow)"/>
+  <circle cx="155" cy="248" r="6" fill="white" opacity="0.8"/>
+
+  <!-- Right endpoint node -->
+  <circle cx="345" cy="248" r="14" fill="#a855f7" filter="url(#glow)"/>
+  <circle cx="345" cy="248" r="6" fill="white" opacity="0.8"/>
+
+  <!-- Lock icon at bottom center -->
+  <g transform="translate(256, 408)" opacity="0.7">
+    <!-- Lock body -->
+    <rect x="-16" y="-6" width="32" height="24" rx="4" fill="url(#accentGrad)"/>
+    <!-- Lock shackle -->
+    <path d="M -9 -6 L -9 -16 Q -9 -26 0 -26 Q 9 -26 9 -16 L 9 -6" fill="none" stroke="url(#accentGrad)" stroke-width="5" stroke-linecap="round"/>
+    <!-- Keyhole -->
+    <circle cx="0" cy="4" r="4" fill="#1a1b30"/>
+    <rect x="-2" y="4" width="4" height="7" rx="1.5" fill="#1a1b30"/>
+  </g>
+</svg>
