@@ -1,12 +1,28 @@
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import type { SSHConfig, ContainerInfo } from '../shared/types'
 
-// Custom APIs for renderer
-const api = {}
+const api = {
+  loadConfig: (): Promise<SSHConfig> => ipcRenderer.invoke('config:load'),
 
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
+  saveConfig: (config: SSHConfig): Promise<void> => ipcRenderer.invoke('config:save', config),
+
+  scanContainers: (config: SSHConfig): Promise<ContainerInfo[]> =>
+    ipcRenderer.invoke('ssh:scan-containers', config),
+
+  startTunnel: (
+    config: SSHConfig,
+    containerId: string,
+    remotePort: number
+  ): Promise<{ localPort: number }> =>
+    ipcRenderer.invoke('ssh:start-tunnel', config, containerId, remotePort),
+
+  stopTunnel: (containerId: string): Promise<void> =>
+    ipcRenderer.invoke('ssh:stop-tunnel', containerId),
+
+  stopAllTunnels: (): Promise<void> => ipcRenderer.invoke('ssh:stop-all')
+}
+
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)

@@ -2,9 +2,197 @@ import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { spawn, execFile, ChildProcess } from 'child_process'
+import { readFileSync, writeFileSync, existsSync } from 'fs'
+import { homedir } from 'os'
+import type { SSHConfig, ContainerInfo } from '../shared/types'
 
+// --- Config persistence ---
+const CONFIG_PATH = join(homedir(), '.tunnel_manager.json')
+
+function loadConfig(): SSHConfig {
+  const defaults: SSHConfig = { host: '', user: 'root', port: '22', keyPath: '' }
+  if (existsSync(CONFIG_PATH)) {
+    try {
+      const raw = JSON.parse(readFileSync(CONFIG_PATH, 'utf-8'))
+      return {
+        host: raw.host ?? defaults.host,
+        user: raw.user ?? defaults.user,
+        port: raw.port ?? defaults.port,
+        keyPath: raw.keyPath ?? raw.key_path ?? defaults.keyPath
+      }
+    } catch {
+      // ignore corrupt config
+    }
+  }
+  return defaults
+}
+
+function saveConfig(config: SSHConfig): void {
+  writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
+}
+
+// --- SSH helpers ---
+function buildSSHArgs(config: SSHConfig, extraArgs?: string[]): string[] {
+  const args: string[] = []
+  const key = (config.keyPath || '').trim()
+  if (key) {
+    args.push('-i', key)
+  }
+  args.push(
+    '-p',
+    (config.port || '22').trim() || '22',
+    '-o',
+    'StrictHostKeyChecking=no',
+    '-o',
+    'ConnectTimeout=10',
+    `${(config.user || 'root').trim()}@${(config.host || '').trim()}`
+  )
+  if (extraArgs) {
+    args.push(...extraArgs)
+  }
+  return args
+}
+
+function runSSHCommand(config: SSHConfig, remoteCmd: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const args = buildSSHArgs(config, [remoteCmd])
+    execFile('ssh', args, { timeout: 15000 }, (error, stdout, stderr) => {
+      if (error) {
+        reject(new Error(stderr || error.message))
+        return
+      }
+      resolve(stdout)
+    })
+  })
+}
+
+// --- Container scanning ---
+async function scanContainers(config: SSHConfig): Promise<ContainerInfo[]> {
+  const output = await runSSHCommand(
+    config,
+    "docker ps --format '{{.ID}}|||{{.Names}}|||{{.Image}}|||{{.Ports}}|||{{.Status}}'"
+  )
+
+  const lines = output.trim().split('\n')
+  const containers: ContainerInfo[] = []
+
+  for (const line of lines) {
+    if (!line.trim()) continue
+    const parts = line.split('|||')
+    if (parts.length < 5) continue
+
+    const [containerId, name, image, portsStr, status] = parts
+
+    const ports: ContainerInfo['ports'] = []
+    if (portsStr.trim()) {
+      const portRegex = /(\d+)\/(tcp|udp)/g
+      let match: RegExpExecArray | null
+      while ((match = portRegex.exec(portsStr)) !== null) {
+        const port = parseInt(match[1], 10)
+        const protocol = match[2]
+        if (!ports.some((p) => p.port === port && p.protocol === protocol)) {
+          ports.push({ port, protocol })
+        }
+      }
+    }
+
+    containers.push({ containerId, name, image, ports, status })
+  }
+
+  return containers
+}
+
+// --- Tunnel management ---
+const tunnelProcesses = new Map<string, ChildProcess>()
+const usedLocalPorts = new Set<number>()
+let nextLocalPort = 10000
+
+function getNextLocalPort(): number {
+  let port = nextLocalPort
+  while (usedLocalPorts.has(port)) {
+    port++
+  }
+  usedLocalPorts.add(port)
+  nextLocalPort = port + 1
+  return port
+}
+
+async function getContainerIP(config: SSHConfig, containerId: string): Promise<string> {
+  const output = await runSSHCommand(
+    config,
+    `docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ${containerId}`
+  )
+  const ip = output.trim()
+  if (!ip) throw new Error('Could not get container IP')
+  return ip
+}
+
+async function startTunnel(
+  config: SSHConfig,
+  containerId: string,
+  remotePort: number
+): Promise<{ localPort: number }> {
+  const containerIP = await getContainerIP(config, containerId)
+  const localPort = getNextLocalPort()
+
+  const args = buildSSHArgs(config, ['-L', `${localPort}:${containerIP}:${remotePort}`, '-N'])
+
+  const proc = spawn('ssh', args, {
+    stdio: ['ignore', 'pipe', 'pipe']
+  })
+
+  // Wait 2 seconds to verify tunnel started
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      if (proc.exitCode !== null) {
+        reject(new Error('SSH tunnel process exited immediately'))
+      } else {
+        resolve()
+      }
+    }, 2000)
+
+    proc.on('error', (err) => {
+      clearTimeout(timer)
+      reject(err)
+    })
+
+    proc.on('exit', (code) => {
+      if (code !== null) {
+        clearTimeout(timer)
+        reject(new Error(`SSH tunnel exited with code ${code}`))
+      }
+    })
+  })
+
+  tunnelProcesses.set(containerId, proc)
+  return { localPort }
+}
+
+function stopTunnel(containerId: string): void {
+  const proc = tunnelProcesses.get(containerId)
+  if (proc) {
+    proc.kill('SIGTERM')
+    setTimeout(() => {
+      if (proc.exitCode === null) {
+        proc.kill('SIGKILL')
+      }
+    }, 5000)
+    tunnelProcesses.delete(containerId)
+  }
+  // Release port — find the local port from args isn't needed since we track by containerId
+  // The port will be available for reuse once we clear used ports properly
+}
+
+function stopAllTunnels(): void {
+  for (const [id] of tunnelProcesses) {
+    stopTunnel(id)
+  }
+  usedLocalPorts.clear()
+}
+
+// --- Electron app ---
 function createWindow(): void {
-  // Create the browser window.
   const mainWindow = new BrowserWindow({
     width: 900,
     height: 670,
@@ -26,8 +214,6 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
-  // HMR for renderer base on electron-vite cli.
-  // Load the remote URL for development or the local html file for production.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
@@ -35,40 +221,54 @@ function createWindow(): void {
   }
 }
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
-  // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
 
-  // Default open or close DevTools by F12 in development
-  // and ignore CommandOrControl + R in production.
-  // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // IPC test
-  ipcMain.on('ping', () => console.log('pong'))
+  // --- IPC Handlers ---
+  ipcMain.handle('config:load', () => {
+    return loadConfig()
+  })
+
+  ipcMain.handle('config:save', (_event, config: SSHConfig) => {
+    saveConfig(config)
+  })
+
+  ipcMain.handle('ssh:scan-containers', async (_event, config: SSHConfig) => {
+    return await scanContainers(config)
+  })
+
+  ipcMain.handle(
+    'ssh:start-tunnel',
+    async (_event, config: SSHConfig, containerId: string, remotePort: number) => {
+      return await startTunnel(config, containerId, remotePort)
+    }
+  )
+
+  ipcMain.handle('ssh:stop-tunnel', (_event, containerId: string) => {
+    stopTunnel(containerId)
+  })
+
+  ipcMain.handle('ssh:stop-all', () => {
+    stopAllTunnels()
+  })
 
   createWindow()
 
   app.on('activate', function () {
-    // On macOS it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
+app.on('before-quit', () => {
+  stopAllTunnels()
+})
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
 })
-
-// In this file you can include the rest of your app"s specific main process
-// code. You can also put them in separate files and require them here.
