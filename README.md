@@ -100,6 +100,26 @@ SSH settings are persisted at `~/.tunnel_manager.json`:
 }
 ```
 
+## Security Considerations
+
+This application executes SSH commands and manages network tunnels. Be aware of the following:
+
+### Known Limitations
+
+- **SSH Host Key Verification Disabled** — `StrictHostKeyChecking=no` is used for convenience. This makes connections vulnerable to Man-in-the-Middle attacks. Use only on trusted networks.
+- **No Input Sanitization** — SSH config fields (host, port, user, key path) are not validated. Ensure you only enter trusted values.
+- **Command Injection Risk** — Docker container IDs are interpolated into shell commands on the remote server. This is safe under normal usage but could be exploited if a container ID is tampered with.
+- **Sandbox Disabled** — Electron's renderer sandbox is turned off (`sandbox: false`) to support the preload bridge. This reduces process isolation.
+- **Plaintext Config** — SSH connection settings in `~/.tunnel_manager.json` are stored unencrypted with default file permissions. Avoid storing this file on shared or unprotected systems.
+- **Error Messages Exposed** — Raw SSH stderr output is displayed in the UI, which may reveal server details.
+
+### Recommendations
+
+- Run the app only on machines you control
+- Use SSH keys with passphrases for authentication
+- Do not use this app over untrusted networks without addressing host key verification
+- Keep your SSH private key permissions restricted (`chmod 600`)
+
 ## License
 
 MIT
