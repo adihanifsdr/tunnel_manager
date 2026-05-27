@@ -1,11 +1,19 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import type { SSHConfig, ContainerInfo } from '../shared/types'
+import type { SSHConfig, ContainerInfo, RecentConnection } from '../shared/types'
 
 const api = {
   loadConfig: (): Promise<SSHConfig> => ipcRenderer.invoke('config:load'),
 
   saveConfig: (config: SSHConfig): Promise<void> => ipcRenderer.invoke('config:save', config),
+
+  loadRecents: (): Promise<RecentConnection[]> => ipcRenderer.invoke('recents:load'),
+
+  addRecent: (config: SSHConfig): Promise<RecentConnection[]> =>
+    ipcRenderer.invoke('recents:add', config),
+
+  removeRecent: (config: SSHConfig): Promise<RecentConnection[]> =>
+    ipcRenderer.invoke('recents:remove', config),
 
   scanContainers: (config: SSHConfig): Promise<ContainerInfo[]> =>
     ipcRenderer.invoke('ssh:scan-containers', config),

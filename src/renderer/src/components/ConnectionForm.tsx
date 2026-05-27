@@ -1,19 +1,26 @@
 import { Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { SSHConfig } from '../../../shared/types'
+import { RecentConnections } from './RecentConnections'
+import type { SSHConfig, RecentConnection } from '../../../shared/types'
 
 interface ConnectionFormProps {
   config: SSHConfig
   onChange: (config: SSHConfig) => void
   onScan: () => void
   scanning: boolean
+  recents: RecentConnection[]
+  onSelectRecent: (recent: RecentConnection) => void
+  onRemoveRecent: (recent: RecentConnection) => void
 }
 
 export function ConnectionForm({
   config,
   onChange,
   onScan,
-  scanning
+  scanning,
+  recents,
+  onSelectRecent,
+  onRemoveRecent
 }: ConnectionFormProps): JSX.Element {
   const update = (field: keyof SSHConfig, value: string): void => {
     onChange({ ...config, [field]: value })
@@ -68,6 +75,11 @@ export function ConnectionForm({
           {scanning ? 'Scanning...' : 'Scan Containers'}
         </Button>
       </div>
+      <RecentConnections
+        recents={recents}
+        onSelect={onSelectRecent}
+        onRemove={onRemoveRecent}
+      />
     </div>
   )
 }

@@ -5,7 +5,7 @@ import icon from '../../resources/icon.png?asset'
 import { spawn, execFile, ChildProcess } from 'child_process'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { homedir } from 'os'
-import type { SSHConfig, ContainerInfo } from '../shared/types'
+import type { SSHConfig, ContainerInfo, RecentConnection } from '../shared/types'
 
 // --- Config persistence ---
 const CONFIG_PATH = join(homedir(), '.tunnel_manager.json')
@@ -30,6 +30,49 @@ function loadConfig(): SSHConfig {
 
 function saveConfig(config: SSHConfig): void {
   writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
+}
+
+// --- Recent connections ---
+const RECENTS_PATH = join(homedir(), '.tunnel_manager_recents.json')
+const MAX_RECENTS = 10
+
+function loadRecents(): RecentConnection[] {
+  if (existsSync(RECENTS_PATH)) {
+    try {
+      const data = JSON.parse(readFileSync(RECENTS_PATH, 'utf-8'))
+      if (Array.isArray(data)) return data
+    } catch {
+      // ignore corrupt file
+    }
+  }
+  return []
+}
+
+function saveRecents(recents: RecentConnection[]): void {
+  writeFileSync(RECENTS_PATH, JSON.stringify(recents, null, 2), 'utf-8')
+}
+
+function recentsKey(c: SSHConfig): string {
+  return `${c.user}@${c.host}:${c.port}`
+}
+
+function addRecent(config: SSHConfig): RecentConnection[] {
+  const recents = loadRecents()
+  const key = recentsKey(config)
+  const filtered = recents.filter((r) => recentsKey(r) !== key)
+  const entry: RecentConnection = { ...config, lastUsed: Date.now() }
+  filtered.unshift(entry)
+  const trimmed = filtered.slice(0, MAX_RECENTS)
+  saveRecents(trimmed)
+  return trimmed
+}
+
+function removeRecent(config: SSHConfig): RecentConnection[] {
+  const recents = loadRecents()
+  const key = recentsKey(config)
+  const filtered = recents.filter((r) => recentsKey(r) !== key)
+  saveRecents(filtered)
+  return filtered
 }
 
 // --- SSH helpers ---
@@ -235,6 +278,18 @@ app.whenReady().then(() => {
 
   ipcMain.handle('config:save', (_event, config: SSHConfig) => {
     saveConfig(config)
+  })
+
+  ipcMain.handle('recents:load', () => {
+    return loadRecents()
+  })
+
+  ipcMain.handle('recents:add', (_event, config: SSHConfig) => {
+    return addRecent(config)
+  })
+
+  ipcMain.handle('recents:remove', (_event, config: SSHConfig) => {
+    return removeRecent(config)
   })
 
   ipcMain.handle('ssh:scan-containers', async (_event, config: SSHConfig) => {

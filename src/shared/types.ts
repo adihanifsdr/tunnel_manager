@@ -5,6 +5,10 @@ export interface SSHConfig {
   keyPath: string
 }
 
+export interface RecentConnection extends SSHConfig {
+  lastUsed: number
+}
+
 export interface ContainerPort {
   port: number
   protocol: string
@@ -28,6 +32,9 @@ export interface TunnelState {
 export const IPC_CHANNELS = {
   CONFIG_LOAD: 'config:load',
   CONFIG_SAVE: 'config:save',
+  RECENTS_LOAD: 'recents:load',
+  RECENTS_ADD: 'recents:add',
+  RECENTS_REMOVE: 'recents:remove',
   SCAN_CONTAINERS: 'ssh:scan-containers',
   START_TUNNEL: 'ssh:start-tunnel',
   STOP_TUNNEL: 'ssh:stop-tunnel',

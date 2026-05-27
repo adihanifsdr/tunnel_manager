@@ -1,9 +1,12 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
-import type { SSHConfig, ContainerInfo } from '../shared/types'
+import type { SSHConfig, ContainerInfo, RecentConnection } from '../shared/types'
 
 interface TunnelManagerAPI {
   loadConfig(): Promise<SSHConfig>
   saveConfig(config: SSHConfig): Promise<void>
+  loadRecents(): Promise<RecentConnection[]>
+  addRecent(config: SSHConfig): Promise<RecentConnection[]>
+  removeRecent(config: SSHConfig): Promise<RecentConnection[]>
   scanContainers(config: SSHConfig): Promise<ContainerInfo[]>
   startTunnel(
     config: SSHConfig,

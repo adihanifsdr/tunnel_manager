@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ConnectionForm } from '@/components/ConnectionForm'
 import { ContainerList } from '@/components/ContainerList'
-import type { SSHConfig, ContainerInfo, TunnelState } from '../../shared/types'
+import type { SSHConfig, ContainerInfo, TunnelState, RecentConnection } from '../../shared/types'
 
 interface StatusMessage {
   text: string
@@ -20,10 +20,11 @@ function App(): JSX.Element {
   const [tunnels, setTunnels] = useState<Map<string, TunnelState>>(new Map())
   const [scanning, setScanning] = useState(false)
   const [status, setStatus] = useState<StatusMessage>({ text: 'Not connected', type: 'idle' })
+  const [recents, setRecents] = useState<RecentConnection[]>([])
 
-  // Load saved config on mount
   useEffect(() => {
     window.api.loadConfig().then(setConfig).catch(console.error)
+    window.api.loadRecents().then(setRecents).catch(console.error)
   }, [])
 
   const handleScan = useCallback(async () => {
@@ -35,6 +36,8 @@ function App(): JSX.Element {
       const result = await window.api.scanContainers(config)
       setContainers(result)
       setStatus({ text: `Found ${result.length} containers`, type: 'success' })
+      const updated = await window.api.addRecent(config)
+      setRecents(updated)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setStatus({ text: 'Error', type: 'error' })
@@ -86,6 +89,16 @@ function App(): JSX.Element {
     [containers]
   )
 
+  const handleSelectRecent = useCallback((recent: RecentConnection) => {
+    const { host, user, port, keyPath } = recent
+    setConfig({ host, user, port, keyPath })
+  }, [])
+
+  const handleRemoveRecent = useCallback(async (recent: RecentConnection) => {
+    const updated = await window.api.removeRecent(recent)
+    setRecents(updated)
+  }, [])
+
   const handleStopAll = useCallback(async () => {
     try {
       await window.api.stopAllTunnels()
@@ -110,6 +123,9 @@ function App(): JSX.Element {
         onChange={setConfig}
         onScan={handleScan}
         scanning={scanning}
+        recents={recents}
+        onSelectRecent={handleSelectRecent}
+        onRemoveRecent={handleRemoveRecent}
       />
 
       <ContainerList
