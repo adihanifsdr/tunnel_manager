@@ -3,6 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { spawn, execFile, ChildProcess } from 'child_process'
+import { createServer } from 'net'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { homedir } from 'os'
 import type { SSHConfig, ContainerInfo, RecentConnection } from '../shared/types'
@@ -148,17 +149,37 @@ async function scanContainers(config: SSHConfig): Promise<ContainerInfo[]> {
 
 // --- Tunnel management ---
 const tunnelProcesses = new Map<string, ChildProcess>()
+const tunnelPorts = new Map<string, number>()
 const usedLocalPorts = new Set<number>()
-let nextLocalPort = 10000
+const BASE_LOCAL_PORT = 10000
 
-function getNextLocalPort(): number {
-  let port = nextLocalPort
-  while (usedLocalPorts.has(port)) {
-    port++
+function isPortFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = createServer()
+    server.unref()
+    server.once('error', () => resolve(false))
+    server.listen({ port, host: '127.0.0.1' }, () => {
+      server.close(() => resolve(true))
+    })
+  })
+}
+
+async function getNextLocalPort(): Promise<number> {
+  for (let port = BASE_LOCAL_PORT; port <= 65535; port++) {
+    if (usedLocalPorts.has(port)) continue
+    if (!(await isPortFree(port))) continue
+    usedLocalPorts.add(port)
+    return port
   }
-  usedLocalPorts.add(port)
-  nextLocalPort = port + 1
-  return port
+  throw new Error('No free local port available')
+}
+
+function releaseTunnelPort(containerId: string): void {
+  const port = tunnelPorts.get(containerId)
+  if (port !== undefined) {
+    usedLocalPorts.delete(port)
+    tunnelPorts.delete(containerId)
+  }
 }
 
 async function getContainerIP(config: SSHConfig, containerId: string): Promise<string> {
@@ -177,38 +198,63 @@ async function startTunnel(
   remotePort: number
 ): Promise<{ localPort: number }> {
   const containerIP = await getContainerIP(config, containerId)
-  const localPort = getNextLocalPort()
+  const localPort = await getNextLocalPort()
 
-  const args = buildSSHArgs(config, ['-L', `${localPort}:${containerIP}:${remotePort}`, '-N'])
+  const args = buildSSHArgs(config, [
+    '-o',
+    'ExitOnForwardFailure=yes',
+    '-L',
+    `${localPort}:${containerIP}:${remotePort}`,
+    '-N'
+  ])
 
   const proc = spawn('ssh', args, {
     stdio: ['ignore', 'pipe', 'pipe']
   })
 
-  // Wait 2 seconds to verify tunnel started
-  await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      if (proc.exitCode !== null) {
-        reject(new Error('SSH tunnel process exited immediately'))
-      } else {
-        resolve()
-      }
-    }, 2000)
-
-    proc.on('error', (err) => {
-      clearTimeout(timer)
-      reject(err)
-    })
-
-    proc.on('exit', (code) => {
-      if (code !== null) {
-        clearTimeout(timer)
-        reject(new Error(`SSH tunnel exited with code ${code}`))
-      }
-    })
+  let stderr = ''
+  proc.stderr?.on('data', (chunk) => {
+    stderr += chunk.toString()
   })
 
+  // Wait 2 seconds to verify tunnel started
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (proc.exitCode !== null) {
+          reject(new Error(stderr.trim() || 'SSH tunnel process exited immediately'))
+        } else {
+          resolve()
+        }
+      }, 2000)
+
+      proc.on('error', (err) => {
+        clearTimeout(timer)
+        reject(err)
+      })
+
+      proc.on('exit', (code) => {
+        if (code !== null) {
+          clearTimeout(timer)
+          reject(new Error(stderr.trim() || `SSH tunnel exited with code ${code}`))
+        }
+      })
+    })
+  } catch (err) {
+    usedLocalPorts.delete(localPort)
+    throw err
+  }
+
   tunnelProcesses.set(containerId, proc)
+  tunnelPorts.set(containerId, localPort)
+
+  proc.on('exit', () => {
+    if (tunnelProcesses.get(containerId) === proc) {
+      tunnelProcesses.delete(containerId)
+      releaseTunnelPort(containerId)
+    }
+  })
+
   return { localPort }
 }
 
@@ -223,15 +269,13 @@ function stopTunnel(containerId: string): void {
     }, 5000)
     tunnelProcesses.delete(containerId)
   }
-  // Release port — find the local port from args isn't needed since we track by containerId
-  // The port will be available for reuse once we clear used ports properly
+  releaseTunnelPort(containerId)
 }
 
 function stopAllTunnels(): void {
   for (const [id] of tunnelProcesses) {
     stopTunnel(id)
   }
-  usedLocalPorts.clear()
 }
 
 // --- Electron app ---
