@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   Play,
   Square,
@@ -18,7 +19,7 @@ import {
   type LucideIcon
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { ContainerInfo } from '../../../shared/types'
+import type { TunnelTarget } from '../../../shared/types'
 
 const SERVICE_ICONS: Record<string, { icon: LucideIcon; color: string }> = {
   postgres: { icon: Database, color: '#336791' },
@@ -57,36 +58,61 @@ const SERVICE_ICONS: Record<string, { icon: LucideIcon; color: string }> = {
   mailpit: { icon: Mail, color: '#D14836' }
 }
 
-function getServiceIcon(image: string): { icon: LucideIcon; color: string } {
-  const imageLower = image.toLowerCase()
+/**
+ * Matched against the name as well as the image.
+ *
+ * A Docker row carries an image like `mongo:7`, which the table was written
+ * for. A Render row has a service *type* — `private_service` — which describes
+ * nothing, while its name (`hoodium-mongo`) usually does.
+ */
+function getServiceIcon(haystack: string): { icon: LucideIcon; color: string } {
+  const lower = haystack.toLowerCase()
   for (const [key, value] of Object.entries(SERVICE_ICONS)) {
-    if (imageLower.includes(key)) return value
+    if (lower.includes(key)) return value
   }
   return { icon: Box, color: '#6b7280' }
 }
 
 interface ContainerRowProps {
-  container: ContainerInfo
+  target: TunnelTarget
   tunnelLocalPort: number | null
   tunneling: boolean
-  onStartTunnel: (containerId: string, remotePort: number) => void
-  onStopTunnel: (containerId: string) => void
+  onStartTunnel: (targetId: string, remotePort: number) => void
+  onStopTunnel: (targetId: string) => void
 }
 
 export function ContainerRow({
-  container,
+  target,
   tunnelLocalPort,
   tunneling,
   onStartTunnel,
   onStopTunnel
 }: ContainerRowProps): JSX.Element {
-  const imageShort = container.image.split('/').pop()?.slice(0, 35) ?? container.image
-  const portsStr = container.ports.length
-    ? container.ports.map((p) => `${p.port}/${p.protocol}`).join(', ')
-    : 'no ports'
-  const firstPort = container.ports[0]
+  /*
+   * The port is typed, not picked.
+   *
+   * Discovery only ever produced a suggestion — the row used to forward
+   * `ports[0]` and offer no way to reach any other port a container exposed.
+   * Render makes that worse than a limitation: the port a service registers
+   * with the platform is not reliably the port the process listens on, so the
+   * suggestion is sometimes simply wrong and has to be correctable.
+   */
+  const [port, setPort] = useState(String(target.ports[0]?.port ?? ''))
+  const parsed = parseInt(port, 10)
+  const valid = Number.isFinite(parsed) && parsed > 0 && parsed <= 65535
 
-  const { icon: ServiceIcon, color: iconColor } = getServiceIcon(container.image)
+  const context =
+    target.kind === 'render'
+      ? [target.image, target.privateHost, target.status].filter(Boolean).join(' • ')
+      : [
+          target.image.split('/').pop()?.slice(0, 35) ?? target.image,
+          target.ports.length
+            ? target.ports.map((p) => `${p.port}/${p.protocol}`).join(', ')
+            : 'no ports',
+          target.status.slice(0, 30)
+        ].join(' • ')
+
+  const { icon: ServiceIcon, color: iconColor } = getServiceIcon(`${target.name} ${target.image}`)
 
   return (
     <div className="flex items-center justify-between py-2.5 px-3 border-b border-border last:border-b-0">
@@ -98,40 +124,42 @@ export function ContainerRow({
           <ServiceIcon className="w-4 h-4" style={{ color: iconColor }} />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold truncate">{container.name}</p>
-          <p className="text-xs text-muted-foreground truncate">
-            {imageShort} &bull; {portsStr} &bull; {container.status.slice(0, 30)}
-          </p>
+          <p className="text-sm font-semibold truncate">{target.name}</p>
+          <p className="text-xs text-muted-foreground truncate">{context}</p>
         </div>
       </div>
       <div className="flex items-center gap-2 ml-3 shrink-0">
-        {firstPort ? (
-          tunneling && tunnelLocalPort ? (
-            <>
-              <span className="text-xs text-success font-mono">
-                localhost:{tunnelLocalPort} &rarr; {firstPort.port}
-              </span>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => onStopTunnel(container.containerId)}
-              >
-                <Square className="w-3 h-3" />
-                Stop
-              </Button>
-            </>
-          ) : (
+        {tunneling && tunnelLocalPort ? (
+          <>
+            <span className="text-xs text-success font-mono">
+              localhost:{tunnelLocalPort} &rarr; {port}
+            </span>
+            <Button variant="destructive" size="sm" onClick={() => onStopTunnel(target.id)}>
+              <Square className="w-3 h-3" />
+              Stop
+            </Button>
+          </>
+        ) : (
+          <>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={port}
+              onChange={(e) => setPort(e.target.value.replace(/\D/g, ''))}
+              placeholder="port"
+              title="Remote port to forward"
+              className="bg-background border border-border rounded px-2 py-1 text-xs font-mono text-foreground w-20 text-center focus:outline-none focus:ring-1 focus:ring-primary"
+            />
             <Button
               size="sm"
-              className="bg-success hover:bg-success/80 text-black font-semibold"
-              onClick={() => onStartTunnel(container.containerId, firstPort.port)}
+              disabled={!valid}
+              className="bg-success hover:bg-success/80 text-black font-semibold disabled:opacity-40"
+              onClick={() => onStartTunnel(target.id, parsed)}
             >
               <Play className="w-3 h-3" />
-              Forward :{firstPort.port}
+              Forward
             </Button>
-          )
-        ) : (
-          <span className="text-xs text-muted-foreground">no ports</span>
+          </>
         )}
       </div>
     </div>

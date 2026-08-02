@@ -1,11 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import type { SSHConfig, ContainerInfo, RecentConnection } from '../shared/types'
+import type { SSHConfig, AppConfig, TunnelTarget, RecentConnection } from '../shared/types'
 
 const api = {
-  loadConfig: (): Promise<SSHConfig> => ipcRenderer.invoke('config:load'),
+  loadConfig: (): Promise<AppConfig> => ipcRenderer.invoke('config:load'),
 
-  saveConfig: (config: SSHConfig): Promise<void> => ipcRenderer.invoke('config:save', config),
+  saveConfig: (config: AppConfig): Promise<void> => ipcRenderer.invoke('config:save', config),
 
   loadRecents: (): Promise<RecentConnection[]> => ipcRenderer.invoke('recents:load'),
 
@@ -15,20 +15,25 @@ const api = {
   removeRecent: (config: SSHConfig): Promise<RecentConnection[]> =>
     ipcRenderer.invoke('recents:remove', config),
 
-  scanContainers: (config: SSHConfig): Promise<ContainerInfo[]> =>
+  /** SSH mode — `docker ps` on the remote host. */
+  scanContainers: (config: SSHConfig): Promise<TunnelTarget[]> =>
     ipcRenderer.invoke('ssh:scan-containers', config),
 
+  /** Render mode — the account's services, via the Render API. */
+  scanRenderServices: (config: AppConfig): Promise<TunnelTarget[]> =>
+    ipcRenderer.invoke('render:scan-services', config),
+
   startTunnel: (
-    config: SSHConfig,
-    containerId: string,
-    remotePort: number
+    config: AppConfig,
+    target: TunnelTarget,
+    remotePort: number,
+    via?: TunnelTarget
   ): Promise<{ localPort: number }> =>
-    ipcRenderer.invoke('ssh:start-tunnel', config, containerId, remotePort),
+    ipcRenderer.invoke('tunnel:start', config, target, remotePort, via),
 
-  stopTunnel: (containerId: string): Promise<void> =>
-    ipcRenderer.invoke('ssh:stop-tunnel', containerId),
+  stopTunnel: (targetId: string): Promise<void> => ipcRenderer.invoke('tunnel:stop', targetId),
 
-  stopAllTunnels: (): Promise<void> => ipcRenderer.invoke('ssh:stop-all')
+  stopAllTunnels: (): Promise<void> => ipcRenderer.invoke('tunnel:stop-all')
 }
 
 if (process.contextIsolated) {
