@@ -1,5 +1,11 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
-import type { SSHConfig, AppConfig, TunnelTarget, RecentConnection } from '../shared/types'
+import type {
+  SSHConfig,
+  AppConfig,
+  TunnelTarget,
+  RecentConnection,
+  TunnelClosed
+} from '../shared/types'
 
 interface TunnelManagerAPI {
   loadConfig(): Promise<AppConfig>
@@ -17,6 +23,8 @@ interface TunnelManagerAPI {
   ): Promise<{ localPort: number }>
   stopTunnel(targetId: string): Promise<void>
   stopAllTunnels(): Promise<void>
+  /** subscribe to tunnels dropping on their own; returns an unsubscribe */
+  onTunnelClosed(cb: (event: TunnelClosed) => void): () => void
 }
 
 declare global {

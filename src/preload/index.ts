@@ -1,6 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import type { SSHConfig, AppConfig, TunnelTarget, RecentConnection } from '../shared/types'
+import type {
+  SSHConfig,
+  AppConfig,
+  TunnelTarget,
+  RecentConnection,
+  TunnelClosed
+} from '../shared/types'
 
 const api = {
   loadConfig: (): Promise<AppConfig> => ipcRenderer.invoke('config:load'),
@@ -33,7 +39,14 @@ const api = {
 
   stopTunnel: (targetId: string): Promise<void> => ipcRenderer.invoke('tunnel:stop', targetId),
 
-  stopAllTunnels: (): Promise<void> => ipcRenderer.invoke('tunnel:stop-all')
+  stopAllTunnels: (): Promise<void> => ipcRenderer.invoke('tunnel:stop-all'),
+
+  /** fires when a tunnel drops without being asked to */
+  onTunnelClosed: (cb: (event: TunnelClosed) => void): (() => void) => {
+    const listener = (_e: unknown, payload: TunnelClosed): void => cb(payload)
+    ipcRenderer.on('tunnel:closed', listener)
+    return () => ipcRenderer.removeListener('tunnel:closed', listener)
+  }
 }
 
 if (process.contextIsolated) {

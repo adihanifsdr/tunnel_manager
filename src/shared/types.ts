@@ -43,8 +43,11 @@ export interface RenderConfig {
  * that is where earlier versions wrote them and a config file that silently
  * forgets your connection on upgrade is a worse bug than an untidy shape.
  */
+export type ThemeId = 'dark' | 'light'
+
 export interface AppConfig extends SSHConfig {
   mode: AppMode
+  theme: ThemeId
   render: RenderConfig
   /**
    * The port that last worked for a target, keyed by `mode:name`.
@@ -111,6 +114,19 @@ export interface TunnelState {
   localPort: number
   remotePort: number
   active: boolean
+}
+
+/**
+ * Pushed when a tunnel goes down on its own — network drop, host restart, the
+ * remote closing the channel.
+ *
+ * Without it the row keeps claiming a port that nothing is listening on any
+ * more, which is the one thing this list must never do.
+ */
+export interface TunnelClosed {
+  targetId: string
+  /** last words from ssh's stderr, when it said anything */
+  reason: string
 }
 
 export const IPC_CHANNELS = {

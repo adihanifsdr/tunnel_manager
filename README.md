@@ -77,18 +77,18 @@ npm run build:linux
 ### SSH / Docker mode
 
 1. Enter your SSH connection details (host, user, port, key path)
-2. Click **Scan Containers** to discover running Docker containers on the remote server
-3. Adjust the port if you want one other than the suggested first exposed port, then click **Forward**
-4. Access the service locally at the assigned `localhost:PORT`
-5. Click **Stop** on individual tunnels or **Stop All** to tear down connections
+2. Click **Scan** to discover running Docker containers on the remote server. The connection panel collapses once a scan succeeds; reopen it from the identity in the top bar
+3. Adjust the remote port if you want one other than the suggested first exposed port, then click **Sambungkan** (or press Enter in the port field)
+4. Access the service locally at the assigned `localhost:PORT` — select the row and use **Salin alamat** to copy it
+5. **Putuskan** tears down one tunnel, **Putuskan semua** tears down every tunnel
 
 ### Render.com mode
 
 1. Add your SSH **public** key to Render — Account Settings → SSH Public Keys. Tunnels authenticate with it, not with the API key
-2. Paste a Render API key into the form (or set `RENDER_API_KEY` in the environment, which takes precedence)
-3. Click **Scan Services**
-4. Check **Tunnel via** — it defaults to a web service, then a worker. Do not pick the datastore you are trying to reach; see above
-5. Set the port and click **Forward**
+2. Paste a Render API key into the panel (or set `RENDER_API_KEY` in the environment, which takes precedence)
+3. Click **Scan**
+4. Check the **gateway** in the detail panel — it defaults to a web service, then a worker. Do not pick the datastore you are trying to reach; see above
+5. Set the remote port and click **Sambungkan**
 
 SSH access requires a paid instance type; free services cannot be tunnelled to.
 
@@ -122,25 +122,43 @@ Both paths share everything after that: automatic local port assignment, and gra
 - **Electron** — Cross-platform desktop runtime
 - **React** — UI framework
 - **TypeScript** — Type safety
-- **Tailwind CSS** — Styling
-- **shadcn/ui** — UI components (Radix UI)
+- **Tailwind CSS** — Styling, on a small hand-rolled token system (no component library)
 - **electron-vite** — Build tooling
 - **Lucide React** — Icons
+
+## Interface
+
+The layout and its rationale are written up in
+[`.design/tunnel-manager/INFORMATION_ARCHITECTURE.md`](.design/tunnel-manager/INFORMATION_ARCHITECTURE.md).
+The short version:
+
+- Rows are **port-first**. The local port is the only thing you carry out of this app, so it is the
+  row's primary numeral, right-aligned so digits line up down the list. Before a tunnel exists the
+  slot holds an em dash and an editable remote port, so nothing shifts when one opens.
+- **Mode is the top-level scope** and sets the accent colour for the whole window, so SSH and
+  Render are never confused for one another.
+- Failures **stay next to the row that failed** instead of going to a modal that loses the message.
+  An SSH error (`Permission denied (publickey)`) is usually the most useful thing on screen.
+- A tunnel that drops on its own is pushed to the UI, so a row never claims a port that nothing is
+  listening on any more.
+- Dark and light themes, remembered across sessions.
 
 ## Project Structure
 
 ```
 src/
-├── main/index.ts           # Electron main process, IPC handlers, SSH operations
+├── main/index.ts            # Electron main process, IPC handlers, SSH operations
 ├── preload/index.ts         # Secure API bridge between main and renderer
 ├── renderer/src/
 │   ├── App.tsx              # Root component, state management
 │   ├── components/
-│   │   ├── ConnectionForm   # SSH config input form
-│   │   ├── ContainerList    # Container list with status display
-│   │   ├── ContainerRow     # Individual container with tunnel controls
-│   │   └── ui/              # Reusable shadcn components
-│   └── lib/utils.ts         # Utility functions
+│   │   ├── ContextBar       # Mode, connection identity, scan, global actions
+│   │   ├── ConnectionPanel  # SSH / Render credentials, recent connections
+│   │   ├── TargetRow        # One container or service, port-first
+│   │   ├── DetailPanel      # Selected target: mapping, copy, gateway, error
+│   │   ├── PortMap          # local → remote pair, shared by row and panel
+│   │   └── StatusLamp       # Lit rail / dot
+│   └── lib/                 # cn() helper, service icon table
 └── shared/types.ts          # Shared TypeScript interfaces
 ```
 

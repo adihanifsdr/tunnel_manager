@@ -19,6 +19,7 @@ function loadConfig(): AppConfig {
     port: '22',
     keyPath: '',
     mode: 'ssh',
+    theme: 'dark',
     render: { apiKey: '' },
     portMemory: {}
   }
@@ -33,9 +34,12 @@ function loadConfig(): AppConfig {
         // Anything unrecognised falls back to SSH, which is what every config
         // file written before this existed means.
         mode: raw.mode === 'render' ? 'render' : 'ssh',
+        theme: raw.theme === 'light' ? 'light' : 'dark',
         render: { apiKey: raw.render?.apiKey ?? '' },
         portMemory:
-          raw.portMemory && typeof raw.portMemory === 'object' ? raw.portMemory : defaults.portMemory
+          raw.portMemory && typeof raw.portMemory === 'object'
+            ? raw.portMemory
+            : defaults.portMemory
       }
     } catch {
       // ignore corrupt config
@@ -494,7 +498,13 @@ async function startTunnel(
 
   const localPort = await getNextLocalPort()
   const targetId = target.id
-  args.push('-o', 'ExitOnForwardFailure=yes', '-L', `${localPort}:${remoteHost}:${remotePort}`, '-N')
+  args.push(
+    '-o',
+    'ExitOnForwardFailure=yes',
+    '-L',
+    `${localPort}:${remoteHost}:${remotePort}`,
+    '-N'
+  )
 
   const proc = spawn('ssh', args, {
     stdio: ['ignore', 'pipe', 'pipe']
@@ -539,9 +549,7 @@ async function startTunnel(
         if (!(await isPortFree(localPort))) return finish()
         if (Date.now() > deadline) {
           proc.kill('SIGTERM')
-          return finish(
-            new Error(stderr.trim() || 'SSH tunnel did not start listening in time')
-          )
+          return finish(new Error(stderr.trim() || 'SSH tunnel did not start listening in time'))
         }
         setTimeout(() => void poll(), 500)
       }
@@ -559,10 +567,11 @@ async function startTunnel(
   tunnelPorts.set(targetId, localPort)
 
   proc.on('exit', () => {
-    if (tunnelProcesses.get(targetId) === proc) {
-      tunnelProcesses.delete(targetId)
-      releaseTunnelPort(targetId)
-    }
+    if (tunnelProcesses.get(targetId) !== proc) return
+    tunnelProcesses.delete(targetId)
+    releaseTunnelPort(targetId)
+    // A tunnel that died on its own still shows as live until the UI is told.
+    send('tunnel:closed', { targetId, reason: stderr.trim().split('\n').slice(-3).join(' ') })
   })
 
   return { localPort }
@@ -589,10 +598,22 @@ function stopAllTunnels(): void {
 }
 
 // --- Electron app ---
+let mainWindow: BrowserWindow | null = null
+
+/**
+ * Quitting destroys the window before the tunnels finish exiting, and each exit
+ * pushes an event — so the window has to be checked for destruction, not just
+ * for null, or the send throws "Object has been destroyed".
+ */
+function send(channel: string, payload: unknown): void {
+  if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return
+  mainWindow.webContents.send(channel, payload)
+}
+
 function createWindow(): void {
-  const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
+  const win = new BrowserWindow({
+    width: 1150,
+    height: 760,
     show: false,
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
@@ -601,20 +622,22 @@ function createWindow(): void {
       sandbox: false
     }
   })
+  mainWindow = win
 
-  mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+  win.on('ready-to-show', () => win.show())
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = null
   })
 
-  mainWindow.webContents.setWindowOpenHandler((details) => {
+  win.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
   })
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    win.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    win.loadFile(join(__dirname, '../renderer/index.html'))
   }
 }
 
