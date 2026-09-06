@@ -8,6 +8,7 @@ import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { homedir } from 'os'
 import type { SSHConfig, AppConfig, AppMode, TunnelTarget, RecentConnection } from '../shared/types'
 import { portMemoryKey } from '../shared/types'
+import { loadSSHConfigHosts } from './ssh-config'
 
 // --- Config persistence ---
 const CONFIG_PATH = join(homedir(), '.tunnel_manager.json')
@@ -667,6 +668,12 @@ app.whenReady().then(() => {
 
   ipcMain.handle('recents:remove', (_event, config: SSHConfig) => {
     return removeRecent(config)
+  })
+
+  // Re-read on every call: the file is edited outside the app, and a stale
+  // list would offer a host that no longer exists or miss one just added.
+  ipcMain.handle('sshconfig:hosts', () => {
+    return loadSSHConfigHosts()
   })
 
   ipcMain.handle('ssh:scan-containers', async (_event, config: AppConfig) => {

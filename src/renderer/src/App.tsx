@@ -4,6 +4,7 @@ import type {
   AppConfig,
   AppMode,
   RecentConnection,
+  SSHConfigHost,
   TunnelState,
   TunnelTarget
 } from '../../shared/types'
@@ -34,6 +35,7 @@ function App(): JSX.Element {
   const [scanning, setScanning] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
   const [recents, setRecents] = useState<RecentConnection[]>([])
+  const [sshHosts, setSshHosts] = useState<SSHConfigHost[]>([])
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [connectionOpen, setConnectionOpen] = useState(true)
@@ -61,6 +63,13 @@ function App(): JSX.Element {
       .catch(console.error)
     window.api.loadRecents().then(setRecents).catch(console.error)
   }, [])
+
+  // ~/.ssh/config is edited outside the app, so it is re-read each time the
+  // panel that shows it opens — cheap, and never a stale list.
+  useEffect(() => {
+    if (!connectionOpen || config.mode !== 'ssh') return
+    window.api.loadSSHConfigHosts().then(setSshHosts).catch(console.error)
+  }, [connectionOpen, config.mode])
 
   useEffect(() => {
     document.documentElement.dataset.theme = config.theme
@@ -253,11 +262,15 @@ function App(): JSX.Element {
         <ConnectionPanel
           config={config}
           recents={recents}
+          sshHosts={sshHosts}
           onChange={persist}
           onSelectRecent={({ host, user, port, keyPath }) =>
             persist({ ...config, host, user, port, keyPath })
           }
           onRemoveRecent={(recent) => void window.api.removeRecent(recent).then(setRecents)}
+          onSelectSSHHost={({ host, user, port, keyPath }) =>
+            persist({ ...config, host, user, port, keyPath })
+          }
         />
       )}
 

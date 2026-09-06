@@ -4,6 +4,7 @@ import type {
   AppConfig,
   TunnelTarget,
   RecentConnection,
+  SSHConfigHost,
   TunnelClosed
 } from '../shared/types'
 
@@ -13,6 +14,7 @@ interface TunnelManagerAPI {
   loadRecents(): Promise<RecentConnection[]>
   addRecent(config: SSHConfig): Promise<RecentConnection[]>
   removeRecent(config: SSHConfig): Promise<RecentConnection[]>
+  loadSSHConfigHosts(): Promise<SSHConfigHost[]>
   scanContainers(config: SSHConfig): Promise<TunnelTarget[]>
   scanRenderServices(config: AppConfig): Promise<TunnelTarget[]>
   startTunnel(

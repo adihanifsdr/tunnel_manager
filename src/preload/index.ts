@@ -5,6 +5,7 @@ import type {
   AppConfig,
   TunnelTarget,
   RecentConnection,
+  SSHConfigHost,
   TunnelClosed
 } from '../shared/types'
 
@@ -20,6 +21,9 @@ const api = {
 
   removeRecent: (config: SSHConfig): Promise<RecentConnection[]> =>
     ipcRenderer.invoke('recents:remove', config),
+
+  /** `Host` entries from `~/.ssh/config`, resolved to what the form needs. */
+  loadSSHConfigHosts: (): Promise<SSHConfigHost[]> => ipcRenderer.invoke('sshconfig:hosts'),
 
   /** SSH mode — `docker ps` on the remote host. */
   scanContainers: (config: SSHConfig): Promise<TunnelTarget[]> =>

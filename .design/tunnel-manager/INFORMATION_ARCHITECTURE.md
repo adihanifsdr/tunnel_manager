@@ -33,7 +33,8 @@ Tiga temuan yang mengubah bentuk layar:
 
 - **Workspace** (selalu terlihat)
   - Context bar — mode, identitas koneksi, ringkasan tunnel aktif, aksi global
-  - Connection panel — detail SSH / API key, koneksi terakhir (terlipat setelah scan berhasil)
+  - Connection panel — detail SSH / API key, host dari `~/.ssh/config`, koneksi terakhir
+    (terlipat setelah scan berhasil)
   - Target list — hasil scan, dikelompokkan per state
   - Detail panel — target terpilih: peta port, perintah SSH, error, gateway (mode Render)
 

@@ -38,6 +38,7 @@ What does work is the private network. From a web service's shell, `hoodium-mong
 - **Real-Time Status** — See active tunnel mappings (`localhost:PORT` → `target:PORT`) at a glance
 - **Persistent Config** — Mode, SSH settings and Render API key are saved to `~/.tunnel_manager.json` and restored on launch
 - **Key-Based Auth** — Supports SSH key authentication with custom key paths
+- **Reads `~/.ssh/config`** — Every `Host` entry is offered as a one-click preset in SSH mode, with `HostName`, `User`, `Port` and `IdentityFile` resolved the way `ssh` resolves them (wildcard blocks, `Include`, `~` and `%d`/`%h` tokens)
 
 ## Getting Started
 
@@ -76,7 +77,7 @@ npm run build:linux
 
 ### SSH / Docker mode
 
-1. Enter your SSH connection details (host, user, port, key path)
+1. Enter your SSH connection details (host, user, port, key path), or click a host under **ssh config** — those are the `Host` entries from `~/.ssh/config`, and picking one fills every field
 2. Click **Scan** to discover running Docker containers on the remote server. The connection panel collapses once a scan succeeds; reopen it from the identity in the top bar
 3. Adjust the remote port if you want one other than the suggested first exposed port, then click **Sambungkan** (or press Enter in the port field)
 4. Access the service locally at the assigned `localhost:PORT` — select the row and use **Salin alamat** to copy it
@@ -113,6 +114,8 @@ ssh -N -L 27024:hoodium-mongo:27017 srv-xxxxx@ssh.singapore.render.com
 
 **SSH / Docker** — the app connects to your server over SSH and runs `docker ps`. Forwarding looks up the container's IP with `docker inspect`, then runs `ssh -L localPort:containerIP:remotePort`.
 
+The hosts in `~/.ssh/config` are resolved by the app rather than handed to `ssh` as aliases, because the app always passes user, host and port on the command line and the command line beats the file. Once `HostName` is resolved, `ssh` matches its config against the resolved address, so a `Host contabo` block's `IdentityFile` would no longer apply either. Resolution follows OpenSSH's first-value-wins rule across `Host *`, wildcard and negated patterns, and `Include` files; `Match` blocks are skipped because they cannot be evaluated without connecting.
+
 **Render.com** — the app calls the Render API for your services and reads each one's `sshAddress`. Forwarding runs `ssh -L localPort:privateHost:remotePort srv-xxxxx@ssh.<region>.render.com`, where the SSH endpoint is the service you chose to tunnel via and `privateHost` belongs to the service you are reaching.
 
 Both paths share everything after that: automatic local port assignment, and graceful shutdown (SIGTERM, then SIGKILL after 5s). A new tunnel is not reported as ready until its local port actually accepts a connection — against Render that takes six to ten seconds, and the older fixed two-second check reported success while connections were still being refused.
@@ -148,12 +151,13 @@ The short version:
 ```
 src/
 ├── main/index.ts            # Electron main process, IPC handlers, SSH operations
+├── main/ssh-config.ts       # ~/.ssh/config parser, resolved like ssh does
 ├── preload/index.ts         # Secure API bridge between main and renderer
 ├── renderer/src/
 │   ├── App.tsx              # Root component, state management
 │   ├── components/
 │   │   ├── ContextBar       # Mode, connection identity, scan, global actions
-│   │   ├── ConnectionPanel  # SSH / Render credentials, recent connections
+│   │   ├── ConnectionPanel  # SSH / Render credentials, ssh config hosts, recents
 │   │   ├── TargetRow        # One container or service, port-first
 │   │   ├── DetailPanel      # Selected target: mapping, copy, gateway, error
 │   │   ├── PortMap          # local → remote pair, shared by row and panel

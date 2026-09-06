@@ -1,17 +1,33 @@
 import { useState } from 'react'
-import { Eye, EyeOff, Clock, X } from 'lucide-react'
-import type { AppConfig, RecentConnection } from '../../../shared/types'
+import { Eye, EyeOff, Clock, X, FileKey } from 'lucide-react'
+import type { AppConfig, RecentConnection, SSHConfig, SSHConfigHost } from '../../../shared/types'
 import { cn } from '@/lib/utils'
 
 const FIELD =
   'rounded border border-line bg-chassis px-2 py-1.5 font-mono text-[12px] text-ink placeholder:text-ink-dim focus:border-accent focus:outline-none'
 
+const CHIP =
+  'group flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[11px] transition-colors'
+
 interface Props {
   config: AppConfig
   recents: RecentConnection[]
+  /** `Host` entries from `~/.ssh/config`; empty when there is no such file */
+  sshHosts: SSHConfigHost[]
   onChange: (config: AppConfig) => void
   onSelectRecent: (recent: RecentConnection) => void
   onRemoveRecent: (recent: RecentConnection) => void
+  onSelectSSHHost: (host: SSHConfigHost) => void
+}
+
+/** The form holds exactly this connection — same endpoint and same key. */
+function sameConnection(a: SSHConfig, b: SSHConfig): boolean {
+  return (
+    a.host.trim() === b.host.trim() &&
+    a.user.trim() === b.user.trim() &&
+    (a.port.trim() || '22') === (b.port.trim() || '22') &&
+    a.keyPath.trim() === b.keyPath.trim()
+  )
 }
 
 function formatAge(timestamp: number): string {
@@ -30,9 +46,11 @@ function formatAge(timestamp: number): string {
 export function ConnectionPanel({
   config,
   recents,
+  sshHosts,
   onChange,
   onSelectRecent,
-  onRemoveRecent
+  onRemoveRecent,
+  onSelectSSHHost
 }: Props): JSX.Element {
   const [showKey, setShowKey] = useState(false)
   const isRender = config.mode === 'render'
@@ -124,6 +142,39 @@ export function ConnectionPanel({
             </label>
           </div>
 
+          {/* ~/.ssh/config is the list most people already maintain, so it comes
+              first; the alias is the label because that is how they know the
+              host, and the resolved endpoint lives in the tooltip */}
+          {sshHosts.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span
+                className="flex shrink-0 items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-ink-dim"
+                title="Host dari ~/.ssh/config"
+              >
+                <FileKey size={11} /> ssh config
+              </span>
+              {sshHosts.map((h) => {
+                const active = sameConnection(config, h)
+                return (
+                  <button
+                    key={h.alias}
+                    onClick={() => onSelectSSHHost(h)}
+                    aria-pressed={active}
+                    className={cn(
+                      CHIP,
+                      active
+                        ? 'border-accent/60 bg-accent/10 text-ink'
+                        : 'border-line bg-surface text-ink-muted hover:border-line-strong hover:text-ink'
+                    )}
+                    title={`${h.user}@${h.host}:${h.port}\nkey: ${h.keyPath || 'bawaan'}`}
+                  >
+                    {h.alias}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
           {recents.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="flex shrink-0 items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-ink-dim">
@@ -134,7 +185,10 @@ export function ConnectionPanel({
                 return (
                   <span
                     key={label}
-                    className="group flex items-center gap-1 rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[11px] text-ink-muted transition-colors hover:border-line-strong hover:text-ink"
+                    className={cn(
+                      CHIP,
+                      'border-line bg-surface text-ink-muted hover:border-line-strong hover:text-ink'
+                    )}
                   >
                     <button
                       onClick={() => onSelectRecent(r)}

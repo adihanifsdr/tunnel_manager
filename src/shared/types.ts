@@ -72,6 +72,19 @@ export interface RecentConnection extends SSHConfig {
   lastUsed: number
 }
 
+/**
+ * One `Host` entry from `~/.ssh/config`, already resolved.
+ *
+ * `host`, `user`, `port` and `keyPath` are what `ssh <alias>` would use — the
+ * block's own values, or what a matching `Host *` block supplies, or ssh's
+ * defaults (local user name, port 22, no explicit key). Resolved here rather
+ * than at connect time because the app always passes user, host and port on the
+ * command line, and the command line beats the file. See `main/ssh-config.ts`.
+ */
+export interface SSHConfigHost extends SSHConfig {
+  alias: string
+}
+
 export interface ContainerPort {
   port: number
   protocol: string
@@ -135,6 +148,7 @@ export const IPC_CHANNELS = {
   RECENTS_LOAD: 'recents:load',
   RECENTS_ADD: 'recents:add',
   RECENTS_REMOVE: 'recents:remove',
+  SSH_CONFIG_HOSTS: 'sshconfig:hosts',
   SCAN_CONTAINERS: 'ssh:scan-containers',
   SCAN_RENDER: 'render:scan-services',
   START_TUNNEL: 'tunnel:start',
